@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from typing import List, Dict
 import json
+from datetime import datetime, timedelta, timezone
 
 from . import models, schemas, database
 
@@ -77,7 +78,12 @@ def get_project_messages(project_id: int, db: Session = Depends(database.get_db)
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    return project.messages
+        
+    messages = db.query(models.Message).filter(
+        models.Message.project_id == project_id,
+        models.Message.is_destroyed == False
+    ).all()
+    return messages
 
 @app.post("/projects/{project_id}/messages", response_model=schemas.Message)
 def send_project_message(project_id: int, sender_id: int, message: schemas.MessageCreate, db: Session = Depends(database.get_db)):
@@ -97,7 +103,20 @@ def send_project_message(project_id: int, sender_id: int, message: schemas.Messa
         project_id=project_id,
         content=message.content
     )
+    
+    if message.self_destruct_seconds:
+        db_message.self_destruct_time = datetime.now(timezone.utc) + timedelta(seconds=message.self_destruct_seconds)
+        
     db.add(db_message)
     db.commit()
     db.refresh(db_message)
     return db_message
+
+@app.post("/messages/{message_id}/destroy")
+def destroy_message(message_id: int, db: Session = Depends(database.get_db)):
+    message = db.query(models.Message).filter(models.Message.id == message_id).first()
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+    message.is_destroyed = True
+    db.commit()
+    return {"status": "success"}

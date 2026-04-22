@@ -10,7 +10,10 @@ function Chat({ currentUser, onLogout }) {
   const [inputMessage, setInputMessage] = useState('');
   const [newProjectName, setNewProjectName] = useState('');
   const [newMemberUsername, setNewMemberUsername] = useState('');
+  const [timerOption, setTimerOption] = useState(0);
+  const [currentTime, setCurrentTime] = useState(Date.now());
   const messagesEndRef = useRef(null);
+  const destroyingMessagesRef = useRef(new Set());
 
   const fetchProjects = async () => {
     try {
@@ -47,14 +50,48 @@ function Chat({ currentUser, onLogout }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, activeProject]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    let shouldUpdateState = false;
+    const activeMessages = messages.filter(msg => {
+      if (msg.self_destruct_time && !msg.is_destroyed) {
+        // Ensure the string is treated as UTC by appending Z if needed
+        const timeStr = msg.self_destruct_time.endsWith('Z') ? msg.self_destruct_time : msg.self_destruct_time + 'Z';
+        const expiry = new Date(timeStr).getTime();
+        
+        if (expiry <= currentTime) {
+          if (!destroyingMessagesRef.current.has(msg.id)) {
+            destroyingMessagesRef.current.add(msg.id);
+            axios.post(`${API_URL}/messages/${msg.id}/destroy`).catch(err => console.error(err));
+            shouldUpdateState = true;
+          }
+          return false; // Remove from list
+        }
+      }
+      return true;
+    });
+
+    if (shouldUpdateState) {
+      setMessages(activeMessages);
+    }
+  }, [currentTime, messages]);
+
   const sendMessage = async (e) => {
     e.preventDefault();
     if (!inputMessage.trim() || !activeProject) return;
 
     try {
-      await axios.post(`${API_URL}/projects/${activeProject.id}/messages?sender_id=${currentUser.id}`, {
-        content: inputMessage.trim()
-      });
+      const payload = { content: inputMessage.trim() };
+      if (timerOption > 0) {
+        payload.self_destruct_seconds = timerOption;
+      }
+      await axios.post(`${API_URL}/projects/${activeProject.id}/messages?sender_id=${currentUser.id}`, payload);
       setInputMessage('');
       fetchHistory();
     } catch (error) {
@@ -167,10 +204,23 @@ function Chat({ currentUser, onLogout }) {
                 const isSentByMe = msg.sender_id === currentUser.id;
                 const messageTime = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 
+                let remainingText = null;
+                let isExpiringSoon = false;
+                if (msg.self_destruct_time) {
+                  const timeStr = msg.self_destruct_time.endsWith('Z') ? msg.self_destruct_time : msg.self_destruct_time + 'Z';
+                  const expiry = new Date(timeStr).getTime();
+                  const diff = Math.floor((expiry - currentTime) / 1000);
+                  if (diff > 0) {
+                    remainingText = `⏱️ ${diff}s`;
+                    if (diff <= 10) isExpiringSoon = true;
+                  }
+                }
+
                 return (
-                  <div key={msg.id || index} className={`message ${isSentByMe ? 'message-sent' : 'message-received'}`} style={{ borderRadius: '0', borderLeft: isSentByMe ? 'none' : '2px solid var(--accent-color)', borderRight: isSentByMe ? '2px solid var(--accent-color)' : 'none' }}>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--accent-color)', marginBottom: '0.2rem' }}>
-                       {msg.sender?.username || 'OP'} [{messageTime}]
+                  <div key={msg.id || index} className={`message ${isSentByMe ? 'message-sent' : 'message-received'} ${isExpiringSoon ? 'pulse-red' : ''}`} style={{ borderRadius: '0', borderLeft: isSentByMe ? 'none' : '2px solid var(--accent-color)', borderRight: isSentByMe ? '2px solid var(--accent-color)' : 'none' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: isExpiringSoon ? '#ef4444' : 'var(--accent-color)', marginBottom: '0.2rem' }}>
+                       <span>{msg.sender?.username || 'OP'} [{messageTime}]</span>
+                       {remainingText && <span>{remainingText}</span>}
                     </div>
                     <div>{msg.content}</div>
                   </div>
@@ -179,7 +229,18 @@ function Chat({ currentUser, onLogout }) {
               <div ref={messagesEndRef} />
             </div>
 
-            <form className="chat-input-area" onSubmit={sendMessage} style={{ borderTop: '1px solid var(--accent-color)' }}>
+            <form className="chat-input-area" onSubmit={sendMessage} style={{ borderTop: '1px solid var(--accent-color)', alignItems: 'center' }}>
+              <select 
+                value={timerOption} 
+                onChange={(e) => setTimerOption(Number(e.target.value))}
+                style={{ padding: '1rem', background: 'rgba(0,0,0,0.5)', color: 'var(--accent-color)', border: '1px solid var(--accent-color)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                <option value={0}>TIMER: OFF</option>
+                <option value={30}>30 SEC</option>
+                <option value={60}>1 MIN</option>
+                <option value={300}>5 MIN</option>
+                <option value={3600}>1 HR</option>
+              </select>
               <input
                 type="text"
                 placeholder="Transmit message..."

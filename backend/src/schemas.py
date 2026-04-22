@@ -38,13 +38,15 @@ class MessageBase(BaseModel):
     content: str
 
 class MessageCreate(MessageBase):
-    pass
+    self_destruct_seconds: Optional[int] = None
 
 class Message(MessageBase):
     id: int
     sender_id: int
     project_id: int
     timestamp: datetime
+    self_destruct_time: Optional[datetime] = None
+    is_destroyed: bool = False
     sender: User
 
     class Config:

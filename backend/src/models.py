@@ -39,6 +39,8 @@ class Message(Base):
     project_id = Column(Integer, ForeignKey("projects.id"))
     content = Column(Text)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    self_destruct_time = Column(DateTime(timezone=True), nullable=True)
+    is_destroyed = Column(Boolean, default=False)
 
     sender = relationship("User", foreign_keys=[sender_id])
     project = relationship("Project", back_populates="messages")
