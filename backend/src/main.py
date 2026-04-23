@@ -1,10 +1,16 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_
 from typing import List, Dict
 import json
 from datetime import datetime, timedelta, timezone
+import os
+import random
+import shutil
+
+from .stego.lsb import extract_ack_from_image
 
 from . import models, schemas, database
 
@@ -113,10 +119,42 @@ def send_project_message(project_id: int, sender_id: int, message: schemas.Messa
     return db_message
 
 @app.post("/messages/{message_id}/destroy")
-def destroy_message(message_id: int, db: Session = Depends(database.get_db)):
+def destroy_message(message_id: int, file: UploadFile = File(...), db: Session = Depends(database.get_db)):
+    temp_file_path = f"temp_{file.filename}"
+    with open(temp_file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    try:
+        extracted_id = extract_ack_from_image(temp_file_path)
+    except Exception as e:
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
+        raise HTTPException(status_code=400, detail=f"Invalid stego image: {str(e)}")
+        
+    if os.path.exists(temp_file_path):
+        os.remove(temp_file_path)
+        
+    if extracted_id != message_id:
+        raise HTTPException(status_code=400, detail="Message ID mismatch in stego image")
+        
     message = db.query(models.Message).filter(models.Message.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
     message.is_destroyed = True
     db.commit()
     return {"status": "success"}
+
+@app.get("/stego/cover-image")
+def get_cover_image():
+    covers_dir = os.path.join(os.path.dirname(__file__), "stego", "covers")
+    if not os.path.exists(covers_dir) or not os.path.isdir(covers_dir):
+        raise HTTPException(status_code=404, detail="Covers directory not found")
+    
+    images = [f for f in os.listdir(covers_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
+    if not images:
+        raise HTTPException(status_code=404, detail="No cover images available")
+        
+    selected_image = random.choice(images)
+    image_path = os.path.join(covers_dir, selected_image)
+    return FileResponse(image_path)
+
