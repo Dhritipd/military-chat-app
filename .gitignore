@@ -2,4 +2,4 @@
 __pycache__/
 *.pyc
 venv/
-.envgit push -u origin main
+.env

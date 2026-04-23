@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import { getRandomCoverImage, hideACKInImage } from '../lib/stego';
 
 const API_URL = 'http://localhost:8000';
 
@@ -68,7 +69,21 @@ function Chat({ currentUser, onLogout }) {
         if (expiry <= currentTime) {
           if (!destroyingMessagesRef.current.has(msg.id)) {
             destroyingMessagesRef.current.add(msg.id);
-            axios.post(`${API_URL}/messages/${msg.id}/destroy`).catch(err => console.error(err));
+            (async () => {
+              try {
+                const coverBlob = await getRandomCoverImage();
+                const stegoFile = await hideACKInImage(msg.id, coverBlob);
+                const formData = new FormData();
+                formData.append('file', stegoFile);
+                await axios.post(`${API_URL}/messages/${msg.id}/destroy`, formData, {
+                  headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                console.log(`Message ${msg.id} destroyed via steganography`);
+              } catch (err) {
+                console.error("Failed to destroy message via stego:", err);
+                // Optionally remove from ref to retry, though it's already removed from UI
+              }
+            })();
             shouldUpdateState = true;
           }
           return false; // Remove from list
