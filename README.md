@@ -98,9 +98,19 @@ Military_web_app/
 
 ---
 
-## ⏳ Phase 2: LSB Steganography — **NOT STARTED**
+## ✅ Phase 2: LSB Steganography — **COMPLETE**
 
-**Status:** 1 of 5 phases complete (20%)
+| Component | Status |
+|-----------|--------|
+| Python LSB module (`lsb.py`) | ✅ |
+| Generation of innocent cover images | ✅ |
+| `GET /stego/cover-image` endpoint | ✅ |
+| Update `/messages/{id}/destroy` for multipart/form-data | ✅ |
+| Extracting message ID from stego image on backend | ✅ |
+| JS Canvas utility (`stego.js`) for embedding ID | ✅ |
+| Modifying Chat component to use LSB ACK | ✅ |
+
+**Status:** 2 of 5 phases complete (40%)
 
 ## API Endpoints
 
@@ -114,5 +124,25 @@ Military_web_app/
 - User authentication and management
 - Project creation and management
 - Real-time chat functionality
+- LSB Steganography for hidden message destruction ACKs
 - RESTful API with FastAPI
 - React-based responsive frontend
+
+## 🔐 Research Gap Covered in Phase 2
+
+**The Problem:** Self-destruct message confirmations (ACKs) are visible on the network, leaking *when* a message was destroyed and *that* communication occurred.
+
+**The Fix:** ACK is hidden inside innocent image pixels using LSB steganography. Network observers see only normal image uploads, not destruction events.
+
+---
+
+## 📋 Before vs After Phase 2
+
+|                 Before                       |            After                        |
+|--------                                      |-------                                  |
+| `POST /destroy` → "Message was just deleted" | `POST /upload` → "User shared a photo"  |
+| Adversary knows timing and activity          | Adversary sees routine traffic          |
+
+---
+
+**Gap Closed:** ACK metadata leakage. 🫡
