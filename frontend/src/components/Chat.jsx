@@ -12,6 +12,8 @@ function Chat({ currentUser, onLogout }) {
   const [newProjectName, setNewProjectName] = useState('');
   const [newMemberUsername, setNewMemberUsername] = useState('');
   const [timerOption, setTimerOption] = useState(0);
+  const [showMembers, setShowMembers] = useState(false);
+  const [projectMembers, setProjectMembers] = useState([]);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const messagesEndRef = useRef(null);
   const destroyingMessagesRef = useRef(new Set());
@@ -34,7 +36,7 @@ function Chat({ currentUser, onLogout }) {
   const fetchHistory = async () => {
     if (!activeProject) return;
     try {
-      const response = await axios.get(`${API_URL}/projects/${activeProject.id}/messages`);
+      const response = await axios.get(`${API_URL}/projects/${activeProject.id}/messages?user_id=${currentUser.id}`);
       setMessages(response.data);
     } catch (error) {
       console.error('Failed to fetch project history', error);
@@ -43,9 +45,26 @@ function Chat({ currentUser, onLogout }) {
 
   useEffect(() => {
     fetchHistory();
+    setShowMembers(false);
     const interval = setInterval(fetchHistory, 3000);
     return () => clearInterval(interval);
   }, [activeProject]);
+  
+  const fetchProjectMembers = async () => {
+    if (!activeProject || activeProject.user_role !== 'commander') return;
+    try {
+      const response = await axios.get(`${API_URL}/projects/${activeProject.id}/members?user_id=${currentUser.id}`);
+      setProjectMembers(response.data);
+    } catch (error) {
+      console.error('Failed to fetch members', error);
+    }
+  };
+
+  useEffect(() => {
+    if (showMembers) {
+      fetchProjectMembers();
+    }
+  }, [showMembers, activeProject]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -141,11 +160,13 @@ function Chat({ currentUser, onLogout }) {
         return;
       }
 
-      await axios.post(`${API_URL}/projects/${activeProject.id}/members`, {
+      await axios.post(`${API_URL}/projects/${activeProject.id}/members?user_id=${currentUser.id}`, {
         user_id: user.id
       });
       setNewMemberUsername('');
       alert('Operator added to operation.');
+      if (showMembers) fetchProjectMembers();
+      fetchProjects();
     } catch (error) {
       console.error('Failed to add member', error);
     }
@@ -188,7 +209,7 @@ function Chat({ currentUser, onLogout }) {
                 <div className="avatar" style={{ borderRadius: '4px', background: 'var(--bg-panel)', border: '1px solid var(--accent-color)' }}>
                   OP
                 </div>
-                <div>{project.name}</div>
+                <div>{project.name} {project.user_role === 'commander' && project.member_count ? <span style={{fontSize: '0.7em', color: 'var(--text-secondary)'}}>({project.member_count} ops)</span> : ''}</div>
               </div>
             ))
           )}
@@ -201,18 +222,35 @@ function Chat({ currentUser, onLogout }) {
             <div className="chat-header" style={{ borderBottom: '1px solid var(--accent-color)', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <h3 style={{ textTransform: 'uppercase' }}>{activeProject.name}</h3>
+                {activeProject.user_role === 'commander' && (
+                  <button onClick={() => setShowMembers(!showMembers)} style={{ padding: '0.3rem 0.6rem', fontSize: '0.7rem' }}>
+                    {showMembers ? 'HIDE MEMBERS' : 'SHOW MEMBERS'}
+                  </button>
+                )}
               </div>
-              <form onSubmit={addMember} style={{ display: 'flex', gap: '0.5rem' }}>
-                <input 
-                  type="text" 
-                  placeholder="Operator ID" 
-                  value={newMemberUsername}
-                  onChange={(e) => setNewMemberUsername(e.target.value)}
-                  style={{ padding: '0.5rem', fontSize: '0.8rem', width: '150px' }}
-                />
-                <button type="submit" style={{ padding: '0.5rem', fontSize: '0.8rem' }}>ADD</button>
-              </form>
+              
+              {activeProject.user_role === 'commander' && (
+                <form onSubmit={addMember} style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input 
+                    type="text" 
+                    placeholder="Operator ID" 
+                    value={newMemberUsername}
+                    onChange={(e) => setNewMemberUsername(e.target.value)}
+                    style={{ padding: '0.5rem', fontSize: '0.8rem', width: '150px' }}
+                  />
+                  <button type="submit" style={{ padding: '0.5rem', fontSize: '0.8rem' }}>ADD</button>
+                </form>
+              )}
             </div>
+
+            {showMembers && activeProject.user_role === 'commander' && (
+              <div style={{ padding: '0.5rem 1rem', background: 'rgba(0,0,0,0.3)', borderBottom: '1px solid var(--accent-color)' }}>
+                <strong style={{ fontSize: '0.8rem', color: 'var(--accent-color)' }}>OPERATORS: </strong>
+                <span style={{ fontSize: '0.8rem' }}>
+                  {projectMembers.map(m => m.username).join(', ')}
+                </span>
+              </div>
+            )}
             
             <div className="messages-container">
               {messages.map((msg, index) => {

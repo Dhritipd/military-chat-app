@@ -26,7 +26,9 @@ class Project(ProjectBase):
     created_by: int
     created_at: datetime
     is_active: bool
-    members: List[User] = []
+    members: Optional[List[User]] = None
+    member_count: Optional[int] = None
+    user_role: Optional[str] = None
 
     class Config:
         from_attributes = True

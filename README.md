@@ -112,6 +112,21 @@ Military_web_app/
 
 **Status:** 2 of 5 phases complete (40%)
 
+---
+
+## ✅ Phase 3: Role-Based Access Control (RBAC) & Social Graph Protection — **COMPLETE**
+
+| Component | Status |
+|-----------|--------|
+| Database schema modification for user roles (Commander/Operator) | ✅ |
+| Codenames assignment upon project creation | ✅ |
+| Backend API restriction for member list visibility | ✅ |
+| Hiding real user identities from Operators | ✅ |
+| Frontend UI updates to conditionally render based on role | ✅ |
+| Preserving LSB steganography compatibility | ✅ |
+
+**Status:** 3 of 5 phases complete (60%)
+
 ## API Endpoints
 
 - `POST /users/` - Create or get user
@@ -124,6 +139,7 @@ Military_web_app/
 - User authentication and management
 - Project creation and management
 - Real-time chat functionality
+- Strict Role-Based Access Control (RBAC) to prevent social graph leakage
 - LSB Steganography for hidden message destruction ACKs
 - RESTful API with FastAPI
 - React-based responsive frontend
@@ -146,3 +162,24 @@ Military_web_app/
 ---
 
 **Gap Closed:** ACK metadata leakage. 🫡
+
+---
+
+## 🔐 Research Gap Covered in Phase 3
+
+**The Problem:** Exposing the full member list and real identities of project participants leaks the social graph (who is talking to whom). If a low-level operator is compromised, the entire unit structure is exposed.
+
+**The Fix:** Implementation of strict Role-Based Access Control (RBAC). Only "Commanders" can view full member lists and real identities. "Operators" see only anonymized codenames and the project name, drastically reducing the value of a compromised operator account.
+
+---
+
+## 📋 Before vs After Phase 3
+
+|                 Before                       |            After                        |
+|--------                                      |-------                                  |
+| All users see project member lists & names   | Operators see only anonymized codenames |
+| Compromised operator exposes unit structure  | Compromised operator exposes nothing    |
+
+---
+
+**Gap Closed:** Social graph leakage and identity exposure. 🛡️

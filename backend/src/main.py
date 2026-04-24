@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, select, insert, update
 from typing import List, Dict
 import json
 from datetime import datetime, timedelta, timezone
@@ -49,21 +49,60 @@ def create_project(project: schemas.ProjectCreate, creator_id: int, db: Session 
         raise HTTPException(status_code=404, detail="User not found")
         
     db_project = models.Project(**project.model_dump(), created_by=creator_id)
-    db_project.members.append(user)
     db.add(db_project)
     db.commit()
     db.refresh(db_project)
-    return db_project
+    
+    stmt = models.project_members.insert().values(
+        user_id=creator_id,
+        project_id=db_project.id,
+        role="commander"
+    )
+    db.execute(stmt)
+    db.commit()
+    db.refresh(db_project)
+    
+    return schemas.Project(
+        id=db_project.id, name=db_project.name, description=db_project.description,
+        created_by=db_project.created_by, created_at=db_project.created_at,
+        is_active=db_project.is_active, user_role="commander", member_count=1, members=None
+    )
 
 @app.get("/projects/{user_id}", response_model=List[schemas.Project])
 def get_user_projects(user_id: int, db: Session = Depends(database.get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return user.projects
+        
+    response = []
+    for p in user.projects:
+        stmt = select(models.project_members.c.role).where(
+            models.project_members.c.user_id == user_id,
+            models.project_members.c.project_id == p.id
+        )
+        role = db.execute(stmt).scalar()
+        
+        proj_dict = {
+            "id": p.id, "name": p.name, "description": p.description,
+            "created_by": p.created_by, "created_at": p.created_at,
+            "is_active": p.is_active, "user_role": role, "members": None
+        }
+        if role == "commander":
+            proj_dict["member_count"] = len(p.members)
+            
+        response.append(schemas.Project(**proj_dict))
+    return response
 
 @app.post("/projects/{project_id}/members", response_model=schemas.Project)
-def add_project_member(project_id: int, member_data: schemas.ProjectMemberAdd, db: Session = Depends(database.get_db)):
+def add_project_member(project_id: int, member_data: schemas.ProjectMemberAdd, user_id: int, db: Session = Depends(database.get_db)):
+    stmt = select(models.project_members.c.role).where(
+        models.project_members.c.user_id == user_id,
+        models.project_members.c.project_id == project_id
+    )
+    role = db.execute(stmt).scalar()
+    if role != "commander":
+        raise HTTPException(status_code=403, detail="Only commanders can add members")
+
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -77,10 +116,36 @@ def add_project_member(project_id: int, member_data: schemas.ProjectMemberAdd, d
         db.commit()
         db.refresh(project)
         
-    return project
+    return schemas.Project(
+        id=project.id, name=project.name, description=project.description,
+        created_by=project.created_by, created_at=project.created_at,
+        is_active=project.is_active, user_role="commander", 
+        member_count=len(project.members), members=None
+    )
+
+@app.get("/projects/{project_id}/members", response_model=List[schemas.User])
+def get_project_members(project_id: int, user_id: int, db: Session = Depends(database.get_db)):
+    stmt = select(models.project_members.c.role).where(
+        models.project_members.c.user_id == user_id,
+        models.project_members.c.project_id == project_id
+    )
+    role = db.execute(stmt).scalar()
+    if role != "commander":
+        raise HTTPException(status_code=403, detail="Only commanders can view members")
+        
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project.members
 
 @app.get("/projects/{project_id}/messages", response_model=List[schemas.Message])
-def get_project_messages(project_id: int, db: Session = Depends(database.get_db)):
+def get_project_messages(project_id: int, user_id: int, db: Session = Depends(database.get_db)):
+    stmt = select(models.project_members.c.role).where(
+        models.project_members.c.user_id == user_id,
+        models.project_members.c.project_id == project_id
+    )
+    role = db.execute(stmt).scalar()
+
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -89,7 +154,20 @@ def get_project_messages(project_id: int, db: Session = Depends(database.get_db)
         models.Message.project_id == project_id,
         models.Message.is_destroyed == False
     ).all()
-    return messages
+    
+    res = []
+    for m in messages:
+        m_dict = {
+            "id": m.id, "sender_id": m.sender_id, "project_id": m.project_id,
+            "content": m.content, "timestamp": m.timestamp,
+            "self_destruct_time": m.self_destruct_time, "is_destroyed": m.is_destroyed
+        }
+        if role == "commander" or m.sender_id == user_id:
+            m_dict["sender"] = m.sender
+        else:
+            m_dict["sender"] = schemas.User(id=0, username="Operator")
+        res.append(schemas.Message(**m_dict))
+    return res
 
 @app.post("/projects/{project_id}/messages", response_model=schemas.Message)
 def send_project_message(project_id: int, sender_id: int, message: schemas.MessageCreate, db: Session = Depends(database.get_db)):
