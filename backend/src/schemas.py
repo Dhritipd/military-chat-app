@@ -26,6 +26,7 @@ class Project(ProjectBase):
     created_by: int
     created_at: datetime
     is_active: bool
+    stego_key: Optional[str] = None
     members: Optional[List[User]] = None
     member_count: Optional[int] = None
     user_role: Optional[str] = None
@@ -41,6 +42,7 @@ class MessageBase(BaseModel):
 
 class MessageCreate(MessageBase):
     self_destruct_seconds: Optional[int] = None
+    recipient_type: str = "project"
 
 class Message(MessageBase):
     id: int
@@ -49,6 +51,8 @@ class Message(MessageBase):
     timestamp: datetime
     self_destruct_time: Optional[datetime] = None
     is_destroyed: bool = False
+    sensitivity: str = "low"
+    recipient_type: str = "project"
     sender: User
 
     class Config:

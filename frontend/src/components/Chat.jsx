@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { getRandomCoverImage, hideACKInImage } from '../lib/stego';
+import { getRandomCoverImage, hideACKInImage, hideACKSpreadSpectrum, getHidingMethod } from '../lib/stego';
 
 const API_URL = 'http://localhost:8000';
 
@@ -12,6 +12,7 @@ function Chat({ currentUser, onLogout }) {
   const [newProjectName, setNewProjectName] = useState('');
   const [newMemberUsername, setNewMemberUsername] = useState('');
   const [timerOption, setTimerOption] = useState(0);
+  const [recipientType, setRecipientType] = useState('project');
   const [showMembers, setShowMembers] = useState(false);
   const [projectMembers, setProjectMembers] = useState([]);
   const [currentTime, setCurrentTime] = useState(Date.now());
@@ -90,17 +91,30 @@ function Chat({ currentUser, onLogout }) {
             destroyingMessagesRef.current.add(msg.id);
             (async () => {
               try {
-                const coverBlob = await getRandomCoverImage();
-                const stegoFile = await hideACKInImage(msg.id, coverBlob);
+                const sensRes = await axios.get(`${API_URL}/messages/${msg.id}/sensitivity`);
+                const sensitivity = sensRes.data.sensitivity;
+                const method = getHidingMethod(sensitivity);
+                
+                const coverBlob = await getRandomCoverImage(activeProject.id);
+                let stegoFile;
+                
+                if (method === 'spread_spectrum') {
+                  stegoFile = await hideACKSpreadSpectrum(msg.id, coverBlob, activeProject.stego_key);
+                } else {
+                  stegoFile = await hideACKInImage(msg.id, coverBlob);
+                }
+                
                 const formData = new FormData();
                 formData.append('file', stegoFile);
+                formData.append('method', method);
+                formData.append('project_id', activeProject.id);
+                
                 await axios.post(`${API_URL}/messages/${msg.id}/destroy`, formData, {
                   headers: { 'Content-Type': 'multipart/form-data' }
                 });
-                console.log(`Message ${msg.id} destroyed via steganography`);
+                console.log(`Message ${msg.id} destroyed via steganography (${method})`);
               } catch (err) {
                 console.error("Failed to destroy message via stego:", err);
-                // Optionally remove from ref to retry, though it's already removed from UI
               }
             })();
             shouldUpdateState = true;
@@ -121,7 +135,10 @@ function Chat({ currentUser, onLogout }) {
     if (!inputMessage.trim() || !activeProject) return;
 
     try {
-      const payload = { content: inputMessage.trim() };
+      const payload = { 
+        content: inputMessage.trim(), 
+        recipient_type: recipientType 
+      };
       if (timerOption > 0) {
         payload.self_destruct_seconds = timerOption;
       }
@@ -223,9 +240,12 @@ function Chat({ currentUser, onLogout }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                 <h3 style={{ textTransform: 'uppercase' }}>{activeProject.name}</h3>
                 {activeProject.user_role === 'commander' && (
-                  <button onClick={() => setShowMembers(!showMembers)} style={{ padding: '0.3rem 0.6rem', fontSize: '0.7rem' }}>
-                    {showMembers ? 'HIDE MEMBERS' : 'SHOW MEMBERS'}
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', background: 'rgba(0,0,0,0.5)', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>KEY: {activeProject.stego_key}</span>
+                    <button onClick={() => setShowMembers(!showMembers)} style={{ padding: '0.3rem 0.6rem', fontSize: '0.7rem' }}>
+                      {showMembers ? 'HIDE MEMBERS' : 'SHOW MEMBERS'}
+                    </button>
+                  </div>
                 )}
               </div>
               
@@ -269,10 +289,17 @@ function Chat({ currentUser, onLogout }) {
                   }
                 }
 
+                let sensitivityColor = '#10b981'; // green (low)
+                if (msg.sensitivity === 'medium') sensitivityColor = '#eab308'; // yellow
+                if (msg.sensitivity === 'high') sensitivityColor = '#ef4444'; // red
+
                 return (
                   <div key={msg.id || index} className={`message ${isSentByMe ? 'message-sent' : 'message-received'} ${isExpiringSoon ? 'pulse-red' : ''}`} style={{ borderRadius: '0', borderLeft: isSentByMe ? 'none' : '2px solid var(--accent-color)', borderRight: isSentByMe ? '2px solid var(--accent-color)' : 'none' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: isExpiringSoon ? '#ef4444' : 'var(--accent-color)', marginBottom: '0.2rem' }}>
-                       <span>{msg.sender?.username || 'OP'} [{messageTime}]</span>
+                       <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                         <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: sensitivityColor, display: 'inline-block' }} title={`Sensitivity: ${msg.sensitivity?.toUpperCase() || 'LOW'}`}></span>
+                         {msg.sender?.username || 'OP'} [{messageTime}]
+                       </span>
                        {remainingText && <span>{remainingText}</span>}
                     </div>
                     <div>{msg.content}</div>
@@ -286,7 +313,7 @@ function Chat({ currentUser, onLogout }) {
               <select 
                 value={timerOption} 
                 onChange={(e) => setTimerOption(Number(e.target.value))}
-                style={{ padding: '1rem', background: 'rgba(0,0,0,0.5)', color: 'var(--accent-color)', border: '1px solid var(--accent-color)', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+                style={{ padding: '1rem', background: 'rgba(0,0,0,0.5)', color: 'var(--accent-color)', border: '1px solid var(--accent-color)', borderRight: 'none', outline: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 <option value={0}>TIMER: OFF</option>
                 <option value={30}>30 SEC</option>
@@ -294,6 +321,17 @@ function Chat({ currentUser, onLogout }) {
                 <option value={300}>5 MIN</option>
                 <option value={3600}>1 HR</option>
               </select>
+              <div style={{ padding: '0 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(0,0,0,0.5)', border: '1px solid var(--accent-color)', borderRight: 'none' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--accent-color)' }}>TO:</span>
+                <select 
+                  value={recipientType} 
+                  onChange={(e) => setRecipientType(e.target.value)}
+                  style={{ background: 'transparent', color: 'var(--accent-color)', border: 'none', outline: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.8rem' }}
+                >
+                  <option value="project">ALL OPS</option>
+                  <option value="commander">COMMANDER ONLY</option>
+                </select>
+              </div>
               <input
                 type="text"
                 placeholder="Transmit message..."

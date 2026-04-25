@@ -127,6 +127,23 @@ Military_web_app/
 
 **Status:** 3 of 5 phases complete (60%)
 
+---
+
+## ✅ Phase 4: Multi-Method Stego ACK & Zero-Click Auto-Assign — **COMPLETE**
+
+| Component | Status |
+|-----------|--------|
+| Python Spread Spectrum module (`spread_spectrum.py`) | ✅ |
+| Python ACK Manager (`ack_manager.py`) | ✅ |
+| Database schema updates (`stego_key`, `recipient_type`) | ✅ |
+| Auto-assign sensitivity logic based on timer and recipient | ✅ |
+| Backend endpoints updated for Multi-Method stego ACKs | ✅ |
+| JS Spread Spectrum encoding utility (`stego.js`) | ✅ |
+| Frontend Recipient toggle and Sensitivity indicators | ✅ |
+| Zero-click operational feasibility (removed manual selection) | ✅ |
+
+**Status:** 4 of 5 phases complete (80%)
+
 ## API Endpoints
 
 - `POST /users/` - Create or get user
@@ -140,7 +157,8 @@ Military_web_app/
 - Project creation and management
 - Real-time chat functionality
 - Strict Role-Based Access Control (RBAC) to prevent social graph leakage
-- LSB Steganography for hidden message destruction ACKs
+- LSB & Spread Spectrum Steganography for hidden message destruction ACKs
+- Zero-click auto-assigned message sensitivity
 - RESTful API with FastAPI
 - React-based responsive frontend
 
@@ -183,3 +201,24 @@ Military_web_app/
 ---
 
 **Gap Closed:** Social graph leakage and identity exposure. 🛡️
+
+---
+
+## 🔐 Research Gap Covered in Phase 4
+
+**The Problem:** Manual sensitivity selection is not feasible in time-critical combat scenarios. A single static steganography method (LSB) becomes predictable against targeted analysis, but operators cannot be burdened with choosing cryptographic methods under fire.
+
+**The Fix:** Implementation of zero-click auto-assign logic. Message sensitivity is derived from existing operational parameters (timer duration and recipient scope). The ACK Manager automatically selects the appropriate hiding method (LSB for routine, Spread Spectrum for tactical), dynamically adjusting steganographic protection without adding cognitive load to the operator.
+
+---
+
+## 📋 Before vs After Phase 4
+
+|                 Before                       |            After                        |
+|--------                                      |-------                                  |
+| Operator manually selects sensitivity level  | Zero-click, auto-derived sensitivity    |
+| Single static stego method (predictable)     | Dynamic multi-method protection         |
+
+---
+
+**Gap Closed:** Operational friction and predictable static steganography. ⚡

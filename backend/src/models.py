@@ -28,6 +28,7 @@ class Project(Base):
     created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     is_active = Column(Boolean, default=True)
+    stego_key = Column(String, nullable=True)
 
     members = relationship("User", secondary=project_members, back_populates="projects")
     messages = relationship("Message", back_populates="project")
@@ -42,6 +43,8 @@ class Message(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     self_destruct_time = Column(DateTime(timezone=True), nullable=True)
     is_destroyed = Column(Boolean, default=False)
+    sensitivity = Column(String, default="low")
+    recipient_type = Column(String, default="project")
 
     sender = relationship("User", foreign_keys=[sender_id])
     project = relationship("Project", back_populates="messages")

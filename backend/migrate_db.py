@@ -10,6 +10,21 @@ try:
 except sqlite3.OperationalError as e:
     print(f"Column might already exist: {e}")
 
+try:
+    cursor.execute("ALTER TABLE projects ADD COLUMN stego_key VARCHAR;")
+except sqlite3.OperationalError as e:
+    print(f"Column stego_key might already exist: {e}")
+
+try:
+    cursor.execute("ALTER TABLE messages ADD COLUMN sensitivity VARCHAR DEFAULT 'low';")
+except sqlite3.OperationalError as e:
+    print(f"Column sensitivity might already exist: {e}")
+
+try:
+    cursor.execute("ALTER TABLE messages ADD COLUMN recipient_type VARCHAR DEFAULT 'project';")
+except sqlite3.OperationalError as e:
+    print(f"Column recipient_type might already exist: {e}")
+
 cursor.execute("""
     UPDATE project_members 
     SET role = 'commander' 
