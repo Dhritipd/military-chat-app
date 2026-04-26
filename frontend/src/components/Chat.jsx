@@ -34,11 +34,58 @@ function Chat({ currentUser, onLogout }) {
     return () => clearInterval(interval);
   }, [currentUser.id]);
 
+  const triggerDestructionAPI = async (msg) => {
+    try {
+      const sensRes = await axios.get(`${API_URL}/messages/${msg.id}/sensitivity`);
+      const sensitivity = sensRes.data.sensitivity;
+      const method = getHidingMethod(sensitivity);
+      
+      const coverBlob = await getRandomCoverImage(activeProject.id);
+      let stegoFile;
+      
+      if (method === 'spread_spectrum') {
+        stegoFile = await hideACKSpreadSpectrum(msg.id, coverBlob, activeProject.stego_key);
+      } else {
+        stegoFile = await hideACKInImage(msg.id, coverBlob);
+      }
+      
+      const formData = new FormData();
+      formData.append('file', stegoFile);
+      formData.append('method', method);
+      formData.append('project_id', activeProject.id);
+      
+      await axios.post(`${API_URL}/messages/${msg.id}/destroy`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      console.log(`Message ${msg.id} destroyed via steganography (${method})`);
+    } catch (err) {
+      console.error("Failed to destroy message via stego:", err);
+    }
+  };
+
   const fetchHistory = async () => {
     if (!activeProject) return;
     try {
       const response = await axios.get(`${API_URL}/projects/${activeProject.id}/messages?user_id=${currentUser.id}`);
-      setMessages(response.data);
+      
+      const validMessages = [];
+      const now = Date.now();
+      
+      for (const msg of response.data) {
+        if (msg.self_destruct_time) {
+          const timeStr = msg.self_destruct_time.endsWith('Z') ? msg.self_destruct_time : msg.self_destruct_time + 'Z';
+          const expiry = new Date(timeStr).getTime();
+          if (expiry <= now) {
+            if (!destroyingMessagesRef.current.has(msg.id)) {
+              destroyingMessagesRef.current.add(msg.id);
+              triggerDestructionAPI(msg);
+            }
+            continue; // Do not render expired messages
+          }
+        }
+        validMessages.push(msg);
+      }
+      setMessages(validMessages);
     } catch (error) {
       console.error('Failed to fetch project history', error);
     }
@@ -79,7 +126,7 @@ function Chat({ currentUser, onLogout }) {
   }, []);
 
   useEffect(() => {
-    let shouldUpdateState = false;
+    let uiChanged = false;
     const activeMessages = messages.filter(msg => {
       if (msg.self_destruct_time && !msg.is_destroyed) {
         // Ensure the string is treated as UTC by appending Z if needed
@@ -89,43 +136,16 @@ function Chat({ currentUser, onLogout }) {
         if (expiry <= currentTime) {
           if (!destroyingMessagesRef.current.has(msg.id)) {
             destroyingMessagesRef.current.add(msg.id);
-            (async () => {
-              try {
-                const sensRes = await axios.get(`${API_URL}/messages/${msg.id}/sensitivity`);
-                const sensitivity = sensRes.data.sensitivity;
-                const method = getHidingMethod(sensitivity);
-                
-                const coverBlob = await getRandomCoverImage(activeProject.id);
-                let stegoFile;
-                
-                if (method === 'spread_spectrum') {
-                  stegoFile = await hideACKSpreadSpectrum(msg.id, coverBlob, activeProject.stego_key);
-                } else {
-                  stegoFile = await hideACKInImage(msg.id, coverBlob);
-                }
-                
-                const formData = new FormData();
-                formData.append('file', stegoFile);
-                formData.append('method', method);
-                formData.append('project_id', activeProject.id);
-                
-                await axios.post(`${API_URL}/messages/${msg.id}/destroy`, formData, {
-                  headers: { 'Content-Type': 'multipart/form-data' }
-                });
-                console.log(`Message ${msg.id} destroyed via steganography (${method})`);
-              } catch (err) {
-                console.error("Failed to destroy message via stego:", err);
-              }
-            })();
-            shouldUpdateState = true;
+            triggerDestructionAPI(msg);
           }
-          return false; // Remove from list
+          uiChanged = true;
+          return false; // Remove from list locally immediately
         }
       }
       return true;
     });
 
-    if (shouldUpdateState) {
+    if (uiChanged || activeMessages.length !== messages.length) {
       setMessages(activeMessages);
     }
   }, [currentTime, messages]);

@@ -10,6 +10,7 @@ import os
 import random
 import shutil
 import string
+import uuid
 
 from .stego.ack_manager import ACKHidingManager
 
@@ -227,7 +228,7 @@ def send_project_message(project_id: int, sender_id: int, message: schemas.Messa
 
 @app.post("/messages/{message_id}/destroy")
 def destroy_message(message_id: int, method: str = Form(...), project_id: int = Form(...), file: UploadFile = File(...), db: Session = Depends(database.get_db)):
-    temp_file_path = f"temp_{file.filename}"
+    temp_file_path = f"temp_{uuid.uuid4().hex}_{file.filename}"
     with open(temp_file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         

@@ -204,7 +204,7 @@ Military_web_app/
 
 ---
 
-## 🔐 Research Gap Covered in Phase 4
+## 🔐 Research Gap Covered in Phase 4 --(Auto-Sensitivity + Multi-Method Stego)
 
 **The Problem:** Manual sensitivity selection is not feasible in time-critical combat scenarios. A single static steganography method (LSB) becomes predictable against targeted analysis, but operators cannot be burdened with choosing cryptographic methods under fire.
 
@@ -222,3 +222,5 @@ Military_web_app/
 ---
 
 **Gap Closed:** Operational friction and predictable static steganography. ⚡
+
+
