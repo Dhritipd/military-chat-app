@@ -2,6 +2,15 @@
 
 A full-stack web application for military project management and chat functionality.
 
+| Name                       | Contribution |
+|----------------------------|--------------|
+| Dhriti Prasad              |              |
+| Soubhadra Bhattacharya     |              |
+| Jishan Ali                 |              |
+| Debosmita Majumdar         |              |
+| Nayan Pal                  |              |
+
+
 ## Tech Stack
 
 - **Backend**: FastAPI (Python)
